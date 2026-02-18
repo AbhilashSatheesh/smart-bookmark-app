@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { signOut } from '@/app/actions'
-import BookmarkList from '@/components/BookmarkList'
-import AddBookmarkForm from '@/components/AddBookmarkForm'
+import BookmarkManager from '@/components/BookmarkManager'
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -58,13 +57,10 @@ export default async function DashboardPage() {
 
             {/* Main Content */}
             <main className="max-w-4xl mx-auto px-4 py-8">
-                {/* Add Bookmark Form */}
-                <div className="mb-8">
-                    <AddBookmarkForm />
-                </div>
-
-                {/* Bookmark List */}
-                <BookmarkList initialBookmarks={bookmarks || []} userId={user.id} />
+                <BookmarkManager
+                    initialBookmarks={bookmarks || []}
+                    userId={user.id}
+                />
             </main>
         </div>
     )
