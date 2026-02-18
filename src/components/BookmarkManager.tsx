@@ -27,6 +27,13 @@ export default function BookmarkManager({ initialBookmarks, userId }: Props) {
     useEffect(() => {
         const supabase = createClient()
 
+        // Set the auth token so filtered postgres_changes work across tabs
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                supabase.realtime.setAuth(session.access_token)
+            }
+        })
+
         const channel = supabase
             .channel('bookmarks-realtime')
             .on(
