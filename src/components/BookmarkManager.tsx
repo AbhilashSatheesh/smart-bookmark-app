@@ -26,49 +26,59 @@ export default function BookmarkManager({ initialBookmarks, userId }: Props) {
     // Realtime subscription — handles updates from OTHER tabs/clients
     useEffect(() => {
         const supabase = createClient()
+        let channel: ReturnType<typeof supabase.channel> | null = null
 
-        const channel = supabase
-            .channel(`bookmarks-${userId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'bookmarks',
-                },
-                (payload) => {
-                    const newBookmark = payload.new as Bookmark
-                    // Only process events for this user
-                    if (newBookmark.user_id !== userId) return
-                    setBookmarks((prev) => {
-                        // Skip if already added optimistically
-                        if (prev.some((b) => b.id === newBookmark.id)) return prev
-                        return [newBookmark, ...prev]
-                    })
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'bookmarks',
-                },
-                (payload) => {
-                    // old record is available for DELETE events
-                    const deleted = payload.old as Partial<Bookmark>
-                    if (deleted.user_id && deleted.user_id !== userId) return
-                    setBookmarks((prev) => prev.filter((b) => b.id !== deleted.id))
-                }
-            )
-            .subscribe((status) => {
-                console.log('Realtime status:', status)
-            })
+        async function subscribe() {
+            // Must set auth token BEFORE subscribing so INSERT events are delivered
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.access_token) {
+                await supabase.realtime.setAuth(session.access_token)
+            }
+
+            channel = supabase
+                .channel(`bookmarks-${userId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'bookmarks',
+                    },
+                    (payload) => {
+                        const newBookmark = payload.new as Bookmark
+                        // Only process events for this user
+                        if (newBookmark.user_id !== userId) return
+                        setBookmarks((prev) => {
+                            // Skip if already added optimistically
+                            if (prev.some((b) => b.id === newBookmark.id)) return prev
+                            return [newBookmark, ...prev]
+                        })
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'DELETE',
+                        schema: 'public',
+                        table: 'bookmarks',
+                    },
+                    (payload) => {
+                        const deleted = payload.old as Partial<Bookmark>
+                        if (deleted.user_id && deleted.user_id !== userId) return
+                        setBookmarks((prev) => prev.filter((b) => b.id !== deleted.id))
+                    }
+                )
+                .subscribe()
+        }
+
+        subscribe()
 
         return () => {
-            supabase.removeChannel(channel)
+            if (channel) supabase.removeChannel(channel)
         }
     }, [userId])
+
+
 
 
     async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
