@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { deleteBookmark } from '@/app/dashboard/actions'
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 type Bookmark = {
     id: string
@@ -10,8 +10,13 @@ type Bookmark = {
     created_at: string
 }
 
-export default function BookmarkItem({ bookmark }: { bookmark: Bookmark }) {
-    const [isPending, startTransition] = useTransition()
+type Props = {
+    bookmark: Bookmark
+    onOptimisticRemove: (id: string) => void
+}
+
+export default function BookmarkItem({ bookmark, onOptimisticRemove }: Props) {
+    const [isPending, setIsPending] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const hostname = (() => {
@@ -28,15 +33,24 @@ export default function BookmarkItem({ bookmark }: { bookmark: Bookmark }) {
         year: 'numeric',
     })
 
-    function handleDelete() {
+    async function handleDelete() {
         setError(null)
-        startTransition(async () => {
-            try {
-                await deleteBookmark(bookmark.id)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to delete')
-            }
-        })
+        setIsPending(true)
+        // Optimistically remove from UI immediately
+        onOptimisticRemove(bookmark.id)
+
+        try {
+            const supabase = createClient()
+            const { error: deleteError } = await supabase
+                .from('bookmarks')
+                .delete()
+                .eq('id', bookmark.id)
+
+            if (deleteError) throw new Error(deleteError.message)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete')
+            setIsPending(false)
+        }
     }
 
     return (

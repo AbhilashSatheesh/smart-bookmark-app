@@ -1,28 +1,46 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { addBookmark } from '@/app/dashboard/actions'
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 export default function AddBookmarkForm() {
-    const [isPending, startTransition] = useTransition()
+    const [isPending, setIsPending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
 
-    async function handleSubmit(formData: FormData) {
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault()
         setError(null)
         setSuccess(false)
-        startTransition(async () => {
-            try {
-                await addBookmark(formData)
-                setSuccess(true)
-                // Reset form
-                const form = document.getElementById('add-bookmark-form') as HTMLFormElement
-                form?.reset()
-                setTimeout(() => setSuccess(false), 3000)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to add bookmark')
-            }
-        })
+        setIsPending(true)
+
+        const form = e.currentTarget
+        const formData = new FormData(form)
+        const title = (formData.get('title') as string).trim()
+        const rawUrl = formData.get('url') as string
+        const url = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+            ? rawUrl
+            : `https://${rawUrl}`
+
+        try {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) throw new Error('Not authenticated')
+
+            const { error: insertError } = await supabase
+                .from('bookmarks')
+                .insert({ url, title, user_id: user.id })
+
+            if (insertError) throw new Error(insertError.message)
+
+            setSuccess(true)
+            form.reset()
+            setTimeout(() => setSuccess(false), 3000)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to add bookmark')
+        } finally {
+            setIsPending(false)
+        }
     }
 
     return (
@@ -34,7 +52,7 @@ export default function AddBookmarkForm() {
                 Add Bookmark
             </h2>
 
-            <form id="add-bookmark-form" action={handleSubmit} className="space-y-3">
+            <form id="add-bookmark-form" onSubmit={handleSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label htmlFor="title" className="block text-slate-400 text-xs font-medium mb-1.5 uppercase tracking-wide">

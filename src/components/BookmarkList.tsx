@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import BookmarkItem from './BookmarkItem'
 
@@ -37,7 +37,7 @@ export default function BookmarkList({ initialBookmarks, userId }: Props) {
                 (payload) => {
                     const newBookmark = payload.new as Bookmark
                     setBookmarks((prev) => {
-                        // Avoid duplicates
+                        // Avoid duplicates (optimistic insert may have already added it)
                         if (prev.some((b) => b.id === newBookmark.id)) return prev
                         return [newBookmark, ...prev]
                     })
@@ -61,6 +61,18 @@ export default function BookmarkList({ initialBookmarks, userId }: Props) {
             supabase.removeChannel(channel)
         }
     }, [userId])
+
+    // Exposed so child components can do optimistic updates
+    function optimisticAdd(bookmark: Bookmark) {
+        setBookmarks((prev) => {
+            if (prev.some((b) => b.id === bookmark.id)) return prev
+            return [bookmark, ...prev]
+        })
+    }
+
+    function optimisticRemove(id: string) {
+        setBookmarks((prev) => prev.filter((b) => b.id !== id))
+    }
 
     if (bookmarks.length === 0) {
         return (
@@ -92,7 +104,11 @@ export default function BookmarkList({ initialBookmarks, userId }: Props) {
 
             <div className="space-y-3">
                 {bookmarks.map((bookmark) => (
-                    <BookmarkItem key={bookmark.id} bookmark={bookmark} />
+                    <BookmarkItem
+                        key={bookmark.id}
+                        bookmark={bookmark}
+                        onOptimisticRemove={optimisticRemove}
+                    />
                 ))}
             </div>
         </div>
