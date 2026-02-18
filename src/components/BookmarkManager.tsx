@@ -27,25 +27,19 @@ export default function BookmarkManager({ initialBookmarks, userId }: Props) {
     useEffect(() => {
         const supabase = createClient()
 
-        // Set the auth token so filtered postgres_changes work across tabs
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                supabase.realtime.setAuth(session.access_token)
-            }
-        })
-
         const channel = supabase
-            .channel('bookmarks-realtime')
+            .channel(`bookmarks-${userId}`)
             .on(
                 'postgres_changes',
                 {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'bookmarks',
-                    filter: `user_id=eq.${userId}`,
                 },
                 (payload) => {
                     const newBookmark = payload.new as Bookmark
+                    // Only process events for this user
+                    if (newBookmark.user_id !== userId) return
                     setBookmarks((prev) => {
                         // Skip if already added optimistically
                         if (prev.some((b) => b.id === newBookmark.id)) return prev
@@ -59,18 +53,23 @@ export default function BookmarkManager({ initialBookmarks, userId }: Props) {
                     event: 'DELETE',
                     schema: 'public',
                     table: 'bookmarks',
-                    filter: `user_id=eq.${userId}`,
                 },
                 (payload) => {
-                    setBookmarks((prev) => prev.filter((b) => b.id !== payload.old.id))
+                    // old record is available for DELETE events
+                    const deleted = payload.old as Partial<Bookmark>
+                    if (deleted.user_id && deleted.user_id !== userId) return
+                    setBookmarks((prev) => prev.filter((b) => b.id !== deleted.id))
                 }
             )
-            .subscribe()
+            .subscribe((status) => {
+                console.log('Realtime status:', status)
+            })
 
         return () => {
             supabase.removeChannel(channel)
         }
     }, [userId])
+
 
     async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault()

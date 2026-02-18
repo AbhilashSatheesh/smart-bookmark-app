@@ -12,6 +12,10 @@ create table if not exists public.bookmarks (
   created_at timestamptz default now() not null
 );
 
+-- IMPORTANT: Set REPLICA IDENTITY FULL so that DELETE events
+-- include all column values (including user_id) in the Realtime payload
+alter table public.bookmarks replica identity full;
+
 -- Enable Row Level Security
 alter table public.bookmarks enable row level security;
 
@@ -34,5 +38,4 @@ create policy "Users can delete own bookmarks"
   using (auth.uid() = user_id);
 
 -- Enable Realtime for the bookmarks table
--- (Also enable it in the Supabase Dashboard: Database > Replication > bookmarks)
 alter publication supabase_realtime add table public.bookmarks;
